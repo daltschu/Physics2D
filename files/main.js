@@ -4,15 +4,21 @@
  */
 var canvas;
 var ctx; //context for drawing in canvas
-var dt = 0.01;
+var android;
+var no_interactions = false; //interactions between objects
+var dt = 0.02;
+var degtorad = Math.PI/180;
 //this is the inverse of the fps rate, expressed in milliseconds
 var ifps = dt*1000;
 var radius = 50;
 var v = 600; //maximum initial speed
-var f = 70; //friction
-var a = 400; //gravity
-var maxmass = 5;
-var minmass = 2;
+var f = 60; //friction
+var a = 200; //gravity
+var delta = 2; //repulsion
+var agx, agy; //projection of gravity to screen
+var orient = 0;
+var maxmass = 3.5;
+var minmass = 2.5;
 var bodylist = [];
     
 
@@ -22,7 +28,24 @@ function setup()
     ctx = canvas.getContext('2d');
     
     window.addEventListener('touchstart', handleTouchEvent, false);
+    window.addEventListener('devicemotion', handleDeviceMotionEvent, false);
+    window.addEventListener('orientationchange', handleOrientationChange, false);
     window.setInterval(draw, ifps);
+    
+    //device dependent variables
+    radius *= Math.min(window.screen.availWidth, window.screen.availHeight) < 500 ? 0.5 : 1.0;
+    android = window.navigator.userAgent.indexOf('Android') === -1 ? 1 : -1;
+    if (window.navigator.userAgent.indexOf('Firefox')>=0) {
+        document.getElementById('message').innerHTML =
+                'this site does not work properly with firefox';
+    }
+    if (window.navigator.userAgent.indexOf('Mobile')<0) {
+        document.getElementById('message').innerHTML =
+                'this site is designed for mobile devices';
+    }
+    //make sure orientation has a value before we draw
+    window.resizeBy(1, 1);
+    orient = window.orientation || 0;
 }
 
 function Vector2D(x,y)
@@ -51,7 +74,7 @@ function addBody(x,y)
     var g = Math.floor(256*Math.random());
     var b = Math.floor(256*Math.random());
     var color = 'rgb(' + r + ',' + g + ',' + b + ')';
-    var mass = (maxmass - minmass)*(minmass + Math.random());
+    var mass = (maxmass - minmass)*Math.random() + minmass;
     bodylist.push(new CreateBody(mass, color, position, speed));
 }
 
@@ -62,9 +85,35 @@ function handleTouchEvent(e)
     addBody(touch_location.pageX, touch_location.pageY);
 }
 
+function handleOrientationChange()
+{
+    orient = window.orientation;
+}
+
+function handleDeviceMotionEvent(e)
+{
+    var acc = e.acceleration;
+    var accGravity = e.accelerationIncludingGravity;
+    agx = acc.x - accGravity.x;
+    agy = acc.y - accGravity.y;
+}
+
 function sign(x)
 {
     return x>0 ? 1 : -1;
+}
+
+function dot(v1, v2)
+{
+    return v1.x*v2.x + v1.y*v2.y;
+}
+
+//reflection in plane perp to vecparam
+function reflect(vec, vecparam)
+{
+    var norm = dot(vecparam, vecparam);
+    var prod = dot(vec, vecparam);
+    return new Vector2D(vec.x-2*prod*vecparam.x/norm, vec.y-2*prod*vecparam.y/norm);
 }
 
 function draw()
@@ -72,12 +121,20 @@ function draw()
     /* this function is called fps times per second with setInterval
      * 
      */
-    var width = screen.availWidth;
-    var height = screen.availHeight;
+    var width = window.innerWidth;
+    var height = window.innerHeight;
     canvas.width = width;
     canvas.height = height;
     var bl = bodylist.length;
     
+    //gravity (positive y coordinate due to definition
+    //of canvas coordinates
+    var cor = Math.cos(orient*degtorad);
+    var sor = Math.sin(orient*degtorad);
+    var flip = orient % 180 === 0 ? -1 : 1;
+    var gx = a*android*flip*(cor*agx + sor*agy);
+    var gy = a*android*flip*(sor*agx - cor*agy);
+            
     for (var i=0; i<bl; i++)
         {
         var color = bodylist[i].color;
@@ -86,15 +143,56 @@ function draw()
         var y = bodylist[i].position.y;
         var vx = bodylist[i].speed.x;
         var vy = bodylist[i].speed.y;
-        
-        //gravity (positive y coordinate due to definition
-        //of canvas coordinates
-        var ax = 0;
-        var ay = a;
-        
+                
+        for (var j=0; j<bl; j++)
+            {//inner loop to compute interaction between objects
+            if (no_interactions) break;
+            if (i<=j) continue;
+            var mass2 = bodylist[j].mass;
+            var x2 = bodylist[j].position.x;
+            var y2 = bodylist[j].position.y;
+            var vx2 = bodylist[j].speed.x;
+            var vy2 = bodylist[j].speed.y;
+            
+            //relative coordinates
+            var r = new Vector2D(x - x2, y - y2);
+            var d = Math.sqrt(dot(r, r));
+            if (d > 2*radius) continue;
+            
+            //center of mass
+            var cmx = (mass*x + mass2*x2)/(mass + mass2);
+            var cmy = (mass*y + mass2*y2)/(mass + mass2);
+            var cmvx = (mass*vx + mass2*vx2)/(mass + mass2);
+            var cmvy = (mass*vy + mass2*vy2)/(mass + mass2);
+            
+            //bounce
+            x = cmx + mass2 * (r.x + delta)/(mass + mass2);
+            y = cmy + mass2 * (r.y + delta)/(mass + mass2);
+            x2 = cmx - mass * (r.x + delta)/(mass + mass2);
+            y2 = cmy - mass * (r.y + delta)/(mass + mass2);
+            //
+            var veccm = new Vector2D(-cmvy, cmvx); //perp to cm
+            var v = new Vector2D(vx, vy);
+            var v2 = new Vector2D(vx2, vy2);
+            v = reflect(v, veccm);
+            v2 = reflect(v2, veccm);
+            vx = v.x;
+            vy = v.y;
+            vx2 = v2.x;
+            vy2 = v2.y;
+            
+            //save new state of particle j
+            bodylist[j].position.x = x2;
+            bodylist[j].position.y = y2;
+            bodylist[j].speed.x = vx2;
+            bodylist[j].speed.y = vy2;           
+            }
+        //
+        //resume outer loop to compute interaction with walls
+                              
         //accelerate
-        vx = vx + (ax - sign(vx)*f)*dt/mass;
-        vy = vy + (ay - sign(vy)*f)*dt/mass;
+        vx = vx + (gx - sign(vx)*f)*dt/mass;
+        vy = vy + (gy - sign(vy)*f)*dt/mass;
         
         //distance covered
         var x1 = x + vx*dt;
@@ -129,11 +227,17 @@ function draw()
         bodylist[i].speed.x = vx;
         bodylist[i].speed.y = vy;
         
+        //ctx.globalCompositeOperation = 'lighter';
+        
         ctx.beginPath();
         ctx.arc(x1, y1, radius, 0, 2*Math.PI);
         ctx.fillStyle = color;
         ctx.fill();
         ctx.closePath();
+        
+        ctx.strokeStyle = 'black';
+        ctx.font = '12pt Helvetica';
+        ctx.strokeText(mass.toFixed(2), x1-14, y1+5);
         }
 }
 
