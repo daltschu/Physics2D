@@ -10,3 +10,15 @@ root {
     display: block;
 }
 
+@viewport {
+    orientation: portrait;
+    width: device-width;
+}
+
+canvas {
+    background: #484848;
+    border: none;
+    max-width: 100%;
+    max-height: 100%;
+}
+
