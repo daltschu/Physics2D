@@ -20,14 +20,18 @@ var orient = 0;
 var maxmass = 3.5;
 var minmass = 2.5;
 var bodylist = [];
-    
+var movebody = -1;    
 
 function setup()
 {
     canvas = document.getElementById('mycanvas');
     ctx = canvas.getContext('2d');
     
-    window.addEventListener('touchstart', handleTouchEvent, false);
+    window.addEventListener('touchstart', handleTouchStartEvent, false);
+    window.addEventListener('touchmove', handleTouchMoveEvent, false);
+    window.addEventListener('touchend', handleTouchEndEvent, false);
+    window.addEventListener('touchleave', handleTouchEndEvent, false);
+    window.addEventListener('touchcancel', handleTouchEndEvent, false);
     window.addEventListener('devicemotion', handleDeviceMotionEvent, false);
     window.addEventListener('orientationchange', handleOrientationChange, false);
     window.setInterval(draw, ifps);
@@ -78,11 +82,44 @@ function addBody(x,y)
     bodylist.push(new CreateBody(mass, color, position, speed));
 }
 
-function handleTouchEvent(e)
+function handleTouchStartEvent(e)
 {
     e.preventDefault();
-    var touch_location = e.touches[0];
-    addBody(touch_location.pageX, touch_location.pageY);
+    switch (e.touches.length)
+    {
+    case 1:
+        var touchX = e.touches[0].pageX;
+        var touchY = e.touches[0].pageY;
+        for (var i=0; i<bodylist.length; i++)
+            {
+                var r = new Vector2D(touchX-bodylist[i].position.x, touchY-bodylist[i].position.y);
+                if (Math.sqrt(dot(r,r))> radius) continue;
+                movebody = i;
+                bodylist[movebody].speed.x = 0;
+                bodylist[movebody].speed.y = 0;
+                break;
+            }
+        if (movebody<0) addBody(touchX, touchY);
+        break;
+    case 2:
+        bodylist = [];
+        break;
+    case 3:
+        window.location = 'help.html';
+    default:
+        break;
+    } 
+}
+
+function handleTouchMoveEvent(e)
+{
+    bodylist[movebody].position.x = e.touches[0].pageX;
+    bodylist[movebody].position.y = e.touches[0].pageY;
+}
+
+function handleTouchEndEvent(e)
+{
+    movebody = -1;
 }
 
 function handleOrientationChange()
@@ -126,6 +163,10 @@ function draw()
     canvas.width = width;
     canvas.height = height;
     var bl = bodylist.length;
+    
+    ctx.fillStyle = 'black';
+    ctx.font = '12pt Helvetica';
+    ctx.fillText('tap with three fingers for help', 10, 30);
     
     //gravity (positive y coordinate due to definition
     //of canvas coordinates
@@ -236,7 +277,7 @@ function draw()
         ctx.closePath();
         
         ctx.strokeStyle = 'black';
-        ctx.font = '12pt Helvetica';
+        ctx.font = '11pt Helvetica';
         ctx.strokeText(mass.toFixed(2), x1-14, y1+5);
         }
 }
