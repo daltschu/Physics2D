@@ -13,8 +13,7 @@ var ifps = dt*1000;
 var radius = 50;
 var v = 600; //maximum initial speed
 var f = 60; //friction
-var a = 200; //gravity
-var delta = 2; //repulsion
+var a = 50; //gravity
 var agx, agy; //projection of gravity to screen
 var orient = 0;
 var maxmass = 3.5;
@@ -199,6 +198,10 @@ function draw()
             var r = new Vector2D(x - x2, y - y2);
             var d = Math.sqrt(dot(r, r));
             if (d > 2*radius) continue;
+
+            var alpha = 2*radius/d;
+            r.x *= alpha;
+            r.y *= alpha;
             
             //center of mass
             var cmx = (mass*x + mass2*x2)/(mass + mass2);
@@ -207,10 +210,10 @@ function draw()
             var cmvy = (mass*vy + mass2*vy2)/(mass + mass2);
             
             //bounce
-            x = cmx + mass2 * (r.x + delta)/(mass + mass2);
-            y = cmy + mass2 * (r.y + delta)/(mass + mass2);
-            x2 = cmx - mass * (r.x + delta)/(mass + mass2);
-            y2 = cmy - mass * (r.y + delta)/(mass + mass2);
+            x = cmx + mass2 * r.x /(mass + mass2);
+            y = cmy + mass2 * r.y /(mass + mass2);
+            x2 = cmx - mass * r.x /(mass + mass2);
+            y2 = cmy - mass * r.y /(mass + mass2);
             //
             var veccm = new Vector2D(-cmvy, cmvx); //perp to cm
             var v = new Vector2D(vx, vy);
